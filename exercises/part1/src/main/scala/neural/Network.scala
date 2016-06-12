@@ -1,12 +1,10 @@
 package neural
 
-import jdk.internal.util.xml.impl.Input
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.ops.transforms.Transforms._
 import org.nd4s.Implicits._
 
-import scala.collection.mutable.{ListBuffer, Seq}
 import scala.util.Random
 
 
@@ -33,7 +31,9 @@ class Network(sizes: List[Int]) {
     (Nd4j.zeros(pair._1.shape(): _*), Nd4j.zeros(pair._2.shape(): _*))
   }
 
-  def evaluate(testData: List[(INDArray, INDArray)]) = ???
+  def evaluate(testData: List[(INDArray, INDArray)]) = {
+    testData.count(data => Nd4j.argMax(feedForward(data._1)) == data._2)
+  }
 
   //Stochastic Gradient Descent
   def SGD(trainingData: List[(INDArray, INDArray)], epochs: Int, miniBatchSize: Int, eta: Double, testData: List[(INDArray, INDArray)] = null): Unit = {
@@ -73,25 +73,41 @@ class Network(sizes: List[Int]) {
    */
 
   def backProp(batch: (INDArray, INDArray)): List[(INDArray, INDArray)] = {
-    val nabla = biasWeightPairs.map(zeroPair)
     var activation = batch._1
-    val activations = ListBuffer(batch._1)
-    val zs = new ListBuffer[INDArray]
-    biasWeightPairs.foreach{pair =>
+    val zsa = biasWeightPairs.map { pair =>
       val z = pair._2.dot(activation) + pair._1
-      zs.append(z)
       activation = sigmoid(z)
-      activations.append(activation)
+      (z, activation)
+    }.reverse
+    var delta = costDerivative(zsa.head._2, batch._2) * sigmoidPrime(zsa.head._1)
+    zsa.drop(1).zip(biasWeightPairs).map { p =>
+      delta = p._2._2.dot(delta) * sigmoidPrime(p._1._1)
+      (delta, delta.dot(p._1._2.transpose()))
     }
+    /*
+    x, y
+        # Note that the variable l in the loop below is used a little
+        # differently to the notation in Chapter 2 of the book.  Here,
+        # l = 1 means the last layer of neurons, l = 2 is the
+        # second-last layer, and so on.  It's a renumbering of the
+        # scheme in the book, used here to take advantage of the fact
+        # that Python can use negative indices in lists.
+        for l in xrange(2, self.num_layers):
+            z = zs[-l]
+            sp = sigmoid_prime(z)
+            delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
+            nabla_b[-l] = delta
+            nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
+        return (nabla_b, nabla_w)
+      */
 
-    var delta = costDerivative(activations.reverse, batch._2) ( sigmoidPrime(zs.reverse))
 
   }
 
-  def costDerivative(reverse: ListBuffer[INDArray], _2: INDArray) = ???
+  def costDerivative(el: INDArray, batchArr: INDArray): INDArray = el-batchArr
 
-  def sigmoidPrime(reverse: ListBuffer[INDArray]) = {
-    reverse.map(el => sigmoid(el)*(sigmoid(el)*(-1)+1))
+  def sigmoidPrime(el: INDArray): INDArray = {
+    sigmoid(el) * (sigmoid(el) * (-1) + 1)
   }
 
 
